@@ -1,0 +1,3 @@
+rootProject.name = 'vector-clock'
+
+include 'core'
