@@ -94,10 +94,10 @@ public class Clocks implements Iterable<Clocks.Entry> {
         for (int index = 0; index < this.clockArray.length; index += 2) {
             if (this.clockArray[index] == nodeIndex) {
                 this.clockArray[index] = this.clockArray[this.clockArray.length - 2];
-                int version = this.clockArray[index + 1];
+                int clock = this.clockArray[index + 1];
                 this.clockArray[index + 1] = this.clockArray[this.clockArray.length - 1];
                 shorten();
-                return version;
+                return clock;
             }
         }
         return 0;

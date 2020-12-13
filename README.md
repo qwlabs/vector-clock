@@ -1,2 +1,2 @@
-# item-clock
-item-clock
+# vector-clock
+vector-clock

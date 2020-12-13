@@ -19,16 +19,16 @@ public class VectorClock {
         this.clocks = new Clocks();
     }
 
-    public VectorClock(NodeIds nodeIds, Map<String, Integer> versions) {
+    public VectorClock(NodeIds nodeIds, Map<String, Integer> nodeClocks) {
         Preconditions.checkNotNull(nodeIds, "Node Ids must not be null.");
         this.nodeIds = nodeIds;
-        if (versions == null || versions.isEmpty()) {
+        if (nodeClocks == null || nodeClocks.isEmpty()) {
             this.clocks = new Clocks();
             return;
         }
-        Clocks clocks = new Clocks(versions.size());
+        Clocks clocks = new Clocks(nodeClocks.size());
         int index = 0;
-        for (Map.Entry<String, Integer> entry : versions.entrySet()) {
+        for (Map.Entry<String, Integer> entry : nodeClocks.entrySet()) {
             clocks.set(nodeIds.index(entry.getKey()), entry.getValue(), index);
             index++;
         }

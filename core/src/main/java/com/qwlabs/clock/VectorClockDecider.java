@@ -17,12 +17,12 @@ public class VectorClockDecider {
         nodeIds.addAll(localClocks.keySet());
         boolean before = false;
         for (String nodeId : nodeIds) {
-            int requestVersion = Objects.<Integer>requireNonNullElse(requestClocks.get(nodeId), 0);
-            int localVersion = Objects.<Integer>requireNonNullElse(localClocks.get(nodeId), 0);
-            if (requestVersion > localVersion) {
+            int requestClock = Objects.<Integer>requireNonNullElse(requestClocks.get(nodeId), 0);
+            int localClock = Objects.<Integer>requireNonNullElse(localClocks.get(nodeId), 0);
+            if (requestClock > localClock) {
                 return false;
             }
-            if (requestVersion < localVersion) {
+            if (requestClock < localClock) {
                 before = true;
             }
         }
