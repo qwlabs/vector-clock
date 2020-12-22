@@ -35,13 +35,13 @@ public class VectorClocks<K> {
     }
 
     @NonNull
-    public VectorClock putClone(@NonNull K key) {
+    public VectorClock getClone(@NonNull K key) {
         Preconditions.checkNotNull(key, "Key must not be null");
-        return new VectorClock(put(key));
+        return new VectorClock(get(key));
     }
 
     @NonNull
-    public VectorClock put(@NonNull K key) {
+    public VectorClock get(@NonNull K key) {
         Preconditions.checkNotNull(key, "Key must not be null");
         VectorClock vectorClock = this.vectorClocks.get(key);
         if (vectorClock == null) {
