@@ -1,129 +1,97 @@
 package com.qwlabs.ring;
 
-import com.qwlabs.clock.NodeIds;
-import com.qwlabs.clock.VectorClock;
-import com.qwlabs.clock.VectorClockDecider;
-import com.qwlabs.clock.VectorClocks;
+import com.google.common.collect.Lists;
+import org.checkerframework.org.apache.commons.lang3.RandomUtils;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.LocalDateTime;
-import java.util.stream.Stream;
+import java.util.List;
+import java.util.Optional;
+import java.util.function.Predicate;
+import java.util.stream.Collectors;
 
 public class ClusterVectorClockTest {
+    private static final Logger LOGGER = LoggerFactory.getLogger(Node.class);
+    private List<Node> nodes;
 
-    private Node nodeA = new Node("A");
-    private Node nodeB = new Node("B");
-    private Node nodeC = new Node("C");
+    @BeforeEach
+    void setUp() {
+        nodes = Lists.newArrayList(
+                new Node("A"),
+                new Node("B"),
+                new Node("C"),
+                new Node("D")
+        );
+    }
 
     @Test
     void test() {
         LocalDateTime now = LocalDateTime.now();
-        nodeA.handleRequest("key", new Value("1", now));
-        replicaToOther(nodeA, nodeB, nodeC);
 
-
-        nodeB.handleRequest("key", new Value("2", now));
-        replicaToOther(nodeB, nodeC);
-        println("A故障了");
-
-
-        nodeC.handleRequest("key", new Value("3", now));
-        println("B故障了");
-
-
-        replicaToOther(nodeC, nodeB);
-        println("B修复了");
-
-
-        nodeC.handleRequest("key", new Value("4", now));
-        replicaToOther(nodeC, nodeB);
-        println("A依旧故障");
-
-
-        replicaToOther(nodeB, nodeA);
-        println("A上线了");
+        setValue("key", new TimestampedObject<>("1", now.minusMinutes(1)));
+        stopAny();
+        setValue("key", new TimestampedObject<>("2", now.plusMinutes(1)));
+        startAny();
+        setValue("key", new TimestampedObject<>("3", now.plusMinutes(4)));
+        stopAny();
+        setValue("key", new TimestampedObject<>("4", now.minusSeconds(3)));
+        stopAny();
+        setValue("key", new TimestampedObject<>("5", now.plusSeconds(2)));
+        startAny();
+        setValue("key", new TimestampedObject<>("6", now.minusSeconds(1)));
+        startAny();
+        setValue("key", new TimestampedObject<>("7", now.minusDays(1)));
     }
 
-    private void println(String message) {
-        System.err.println("------------" + message  + "------------");
-        System.out.println(nodeA);
-        System.out.println(nodeB);
-        System.out.println(nodeC);
-        System.err.println("------------------------------------");
+    private void setValue(String key, TimestampedObject<String> value) {
+        Node node = randomNode(Node::isRunning).get();
+        node.handleRequest(key, value);
+        replicaToOther(node, key, value);
+        println();
     }
 
-    private void replicaToOther(Node node, Node... others) {
-        Stream.of(others)
-                .filter(toNode->toNode!=node)
-                .forEach(toNode->
-                    toNode.handleReplica("key", node.value, node.name, node.vectorClocks.getClone("key"))
+    private void stopAny() {
+        randomNode(Node::isRunning).ifPresent(Node::stop);
+    }
+
+    private void startAny() {
+        randomNode(Node::isStopped).ifPresent(node->{
+            Node runningNode = randomNode(Node::isRunning).get();
+            node.start();
+//          拉平差距
+            runningNode.getData().forEach((key, value)->replicaToOther(runningNode, key, value));
+        });
+    }
+
+    private Optional<Node> randomNode(Predicate<Node> predicate) {
+        List<Node> filteredNodes = nodes.stream()
+                .filter(predicate)
+                .collect(Collectors.toList());
+        if (filteredNodes.isEmpty()) {
+            return Optional.empty();
+        }
+        int index = RandomUtils.nextInt(0, filteredNodes.size());
+        return Optional.of(filteredNodes.get(index));
+    }
+
+    private void println() {
+        LOGGER.error("------------------------------------");
+        nodes.forEach(node -> LOGGER.error("{}", node));
+        LOGGER.error("------------------------------------");
+    }
+
+    private void replicaToOther(Node node, String key, TimestampedObject<?> value) {
+        if (!node.isRunning()) {
+            return;
+        }
+        nodes.stream()
+                .filter(toNode -> toNode != node)
+                .forEach(toNode ->
+                        toNode.handleReplica(key, value, node.getName(), node.getVectorClocks().getClone("key"))
                 );
     }
 
-    private class Value {
-        private final String value;
-        private final LocalDateTime timestamp;
-
-        public Value(String value, LocalDateTime timestamp) {
-            this.value = value;
-            this.timestamp = timestamp;
-        }
-
-        @Override
-        public String toString() {
-            return "{value:" + value + ", timestamp=" + timestamp + "}";
-        }
-    }
-
-    private class Node {
-        private final String name;
-        private final NodeIds nodeIds;
-        private final VectorClocks<String> vectorClocks;
-        private Value value;
-
-        public Node(String name) {
-            this.name = name;
-            nodeIds = new NodeIds();
-            vectorClocks = new VectorClocks<>(nodeIds);
-        }
-
-        public void handleRequest(String key, Value value) {
-            vectorClocks.tick(key, name);
-            this.value = value;
-        }
-
-        public void handleReplica(String key, Value requestValue,
-                                  String requestNode,
-                                  VectorClock requestVectorClock) {
-            VectorClock localVectorClock = vectorClocks.getClone(key);
-            new VectorClockDecider().decide(requestVectorClock, localVectorClock,
-                    vectorClocks, requestNode, key,
-                    new VectorClockDecider.Operator() {
-                        @Override
-                        public void ignore() {
-                            System.out.println(requestNode + "->" + name + ": request is before local, ignore it.");
-                        }
-
-                        @Override
-                        public void accept() {
-                            System.out.println(requestNode + "->" + name + ": request is after local, accept it.");
-                            value = requestValue;
-                        }
-
-                        @Override
-                        public void conflict() {
-                            System.out.println(requestNode + "->" + name + ": request local is conflict, fix it.");
-                            if (requestValue.timestamp.isAfter(value.timestamp)) {
-                                Node.this.value = requestValue;
-                            }
-                        }
-                    });
-        }
-
-
-        @Override
-        public String toString() {
-            return name + ": value=" + value + ", vector clocks:" + vectorClocks;
-        }
-    }
 }
