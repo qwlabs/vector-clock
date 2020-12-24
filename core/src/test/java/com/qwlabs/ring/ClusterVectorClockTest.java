@@ -61,8 +61,10 @@ public class ClusterVectorClockTest {
         randomNode(Node::isStopped).ifPresent(node->{
             Node runningNode = randomNode(Node::isRunning).get();
             node.start();
-//          拉平差距
-            runningNode.getData().forEach((key, value)->replicaToOther(runningNode, key, value));
+//          模拟节点serve前需要拉平数据后才可以serve
+            runningNode.getData().forEach((key, value)-> {
+                node.handleReplica(key, value, runningNode.getName(), runningNode.getVectorClocks().getClone(key));
+            });
         });
     }
 
@@ -90,7 +92,7 @@ public class ClusterVectorClockTest {
         nodes.stream()
                 .filter(toNode -> toNode != node)
                 .forEach(toNode ->
-                        toNode.handleReplica(key, value, node.getName(), node.getVectorClocks().getClone("key"))
+                        toNode.handleReplica(key, value, node.getName(), node.getVectorClocks().getClone(key))
                 );
     }
 
